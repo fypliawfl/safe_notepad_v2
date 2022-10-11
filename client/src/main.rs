@@ -79,16 +79,27 @@ impl App {
         cc.egui_ctx.set_fonts(fonts);
 
         let mut rng = thread_rng();
+        let api_user_key = pastebin::api_user_key()?;
+        let msgs = pastebin::collect(&api_user_key)?;
+        let rsa_private_key = rsa_private_key(&mut rng);
+        let rsa_public_key = rsa_private_key.to_public_key();
 
-        pastebin::insert(&msg::Msg::GreetRequest(GreetRequest(
-            rsa_private_key(&mut rng).to_public_key(),
-        )))?;
+        let session_key = if let Some((_, encrypted_session_key)) = msgs
+            .iter()
+            .flat_map(|(_, msg)| msg.as_greet_response())
+            .find(|(request, _)| request.0 == rsa_public_key)
+        {
+            Some(decrypt_aes_key(&encrypted_session_key, &rsa_private_key)?)
+        } else {
+            pastebin::insert(&msg::Msg::GreetRequest(GreetRequest(rsa_public_key)))?;
+            None
+        };
 
         Ok(Self {
             rng,
-            api_user_key: pastebin::api_user_key()?,
-            session_key: None,
-            msgs: vec![],
+            api_user_key,
+            session_key,
+            msgs,
             pending_request_instant: Instant::now(),
             pending_get_request: None,
             name: "Имя новой записи".into(),
