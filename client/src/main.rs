@@ -56,7 +56,7 @@ fn pending_label(ui: &mut Ui, text: &str) {
     });
 }
 
-fn full_width(ui: &Ui, style: &TextStyle) -> Vec2 {
+fn available_width(ui: &Ui, style: &TextStyle) -> Vec2 {
     Vec2::new(ui.available_width(), ui.text_style_height(style))
 }
 
@@ -124,7 +124,7 @@ impl App {
                     self.session_key = None;
                 };
                 ui.add_sized(
-                    full_width(ui, &TextStyle::Body),
+                    available_width(ui, &TextStyle::Body),
                     Label::new(format!("{} ...", {
                         serde_json::to_string(&rsa_private_key(&mut self.rng))
                             .unwrap()
@@ -161,7 +161,7 @@ impl App {
         }
     }
 
-    fn show_actions(&mut self, ui: &mut Ui, session_key: AesKey) {
+    fn show_actions(&mut self, ui: &mut Ui, session_key: &AesKey) {
         ui.horizontal(|ui| {
             ui.group(|ui| {
                 if ui.button("Новая запись").clicked() {
@@ -186,7 +186,7 @@ impl App {
                 }
                 if ui
                     .add_sized(
-                        full_width(&ui, &TextStyle::Button),
+                        available_width(&ui, &TextStyle::Button),
                         Button::new("Удалить запись"),
                     )
                     .clicked()
@@ -197,17 +197,29 @@ impl App {
         });
     }
 
-    fn show_idle(&mut self, ui: &mut Ui, session_key: AesKey) {
-        self.show_actions(ui, session_key);
-        self.show_new_rsa_key(ui);
-        ui.add_sized(
-            full_width(ui, &TextStyle::Body),
-            TextEdit::singleline(&mut self.name),
-        );
-        ui.add_sized(ui.available_size(), TextEdit::multiline(&mut self.content));
+    fn show_get_and_name(&mut self, ui: &mut Ui, session_key: &AesKey) {
+        ui.horizontal(|ui| {
+            if ui.button("Найти запись").clicked() {
+                self.pending_get_request = Some(
+                    ActionRequest::Get {
+                        name: self.name.clone(),
+                    }
+                    .encrypt(session_key)
+                    .unwrap(),
+                )
+            }
+            ui.add_sized(
+                available_width(ui, &TextStyle::Body),
+                TextEdit::singleline(&mut self.name),
+            );
+        });
     }
 
-    fn show_pending_get_request(&mut self, ui: &mut Ui, session_key: AesKey) -> anyhow::Result<()> {
+    fn show_pending_get_request(
+        &mut self,
+        ui: &mut Ui,
+        session_key: &AesKey,
+    ) -> anyhow::Result<()> {
         pending_label(ui, &format!("Получаем запись \"{}\" ...", self.name));
         if self.pending_request_instant.elapsed() >= PENDING_REQUEST_TIMEOUT {
             self.msgs = pastebin::collect(&self.api_user_key)?;
@@ -224,8 +236,8 @@ impl App {
                 match encrypted_response {
                     either::Either::Left(paste) => {
                         if let Some(paste) = paste.as_ref() {
-                            self.name = paste.decrypt_name(&session_key)?;
-                            self.content = paste.decrypt_content(&session_key)?;
+                            self.name = paste.decrypt_name(session_key)?;
+                            self.content = paste.decrypt_content(session_key)?;
                             self.pending_get_request = None;
                         } else {
                             anyhow::bail!("EncryptedActionRequest yielded no paste");
@@ -249,9 +261,12 @@ impl eframe::App for App {
         CentralPanel::default().show(ctx, |ui| {
             if let Some(session_key) = self.session_key.clone() {
                 if self.pending_get_request.is_some() {
-                    self.show_pending_get_request(ui, session_key).unwrap();
+                    self.show_pending_get_request(ui, &session_key).unwrap();
                 } else {
-                    self.show_idle(ui, session_key);
+                    self.show_actions(ui, &session_key);
+                    self.show_new_rsa_key(ui);
+                    self.show_get_and_name(ui, &session_key);
+                    ui.add_sized(ui.available_size(), TextEdit::multiline(&mut self.content));
                 }
             } else {
                 self.show_pending_greet_request(ui).unwrap();

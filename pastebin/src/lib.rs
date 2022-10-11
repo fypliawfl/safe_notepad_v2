@@ -96,7 +96,7 @@ pub fn collect(api_user_key: &str) -> anyhow::Result<Vec<(ApiPasteKey, Msg)>> {
 
     let raw = BufReader::new(response.as_bytes());
     let parser = EventReader::new(raw);
-    let mut key_paste = Vec::with_capacity(1000);
+    let mut key_msgs = Vec::with_capacity(1000);
     let mut is_key_next = false;
     for event in parser {
         if is_key_next {
@@ -104,8 +104,8 @@ pub fn collect(api_user_key: &str) -> anyhow::Result<Vec<(ApiPasteKey, Msg)>> {
                 Ok(XmlEvent::Characters(characters)) => characters,
                 _ => unreachable!(),
             };
-            if let Ok(paste) = serde_json::from_slice(get(api_user_key, &characters)?.as_bytes()) {
-                key_paste.push((characters, paste));
+            if let Ok(msg) = serde_json::from_slice(get(api_user_key, &characters)?.as_bytes()) {
+                key_msgs.push((characters, msg));
             }
             is_key_next = false;
         } else {
@@ -118,7 +118,7 @@ pub fn collect(api_user_key: &str) -> anyhow::Result<Vec<(ApiPasteKey, Msg)>> {
             }
         }
     }
-    Ok(key_paste)
+    Ok(key_msgs)
 }
 
 pub fn remove(api_user_key: &str, api_paste_key: &str) -> anyhow::Result<()> {
