@@ -33,6 +33,15 @@ pub type EncryptedAesKey = Vec<u8>;
 
 pub type GreetResponse = (GreetRequest, EncryptedAesKey);
 
+pub fn decrypt_aes_key(
+    aes_key: &EncryptedAesKey,
+    rsa_private_key: &RsaPrivateKey,
+) -> RsaResult<AesKey> {
+    rsa_private_key
+        .decrypt(PaddingScheme::new_pkcs1v15_encrypt(), aes_key)
+        .map(|bytes| GenericArray::from_slice(&bytes).clone())
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct EncryptedData {
     pub content: Vec<GenericArray<u8, U16>>,
@@ -87,6 +96,15 @@ pub struct Paste {
     pub content: String,
 }
 
+impl Paste {
+    pub fn encrypt(&self, key: &AesKey) -> serde_cbor::Result<EncryptedPaste> {
+        Ok(EncryptedPaste {
+            name: EncryptedData::encrypt(&self.name, key)?,
+            content: EncryptedData::encrypt(&self.content, key)?,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct EncryptedPaste {
     pub name: EncryptedData,
@@ -116,6 +134,21 @@ pub enum ActionRequest {
     Remove { name: String },
     Mut(Paste),
     New(Paste),
+}
+
+impl ActionRequest {
+    pub fn encrypt(&self, key: &AesKey) -> serde_cbor::Result<EncryptedActionRequest> {
+        Ok(match self {
+            ActionRequest::Get { name } => EncryptedActionRequest::Get {
+                name: EncryptedData::encrypt(&name, key)?,
+            },
+            ActionRequest::Remove { name } => EncryptedActionRequest::Remove {
+                name: EncryptedData::encrypt(&name, key)?,
+            },
+            ActionRequest::Mut(paste) => EncryptedActionRequest::Mut(paste.encrypt(key)?),
+            ActionRequest::New(paste) => EncryptedActionRequest::New(paste.encrypt(key)?),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -156,9 +189,42 @@ impl EncryptedActionRequest {
         }
     }
 
+    pub fn paste(&self) -> Option<&EncryptedPaste> {
+        match self {
+            EncryptedActionRequest::New(paste) => Some(paste),
+            EncryptedActionRequest::Mut(paste) => Some(paste),
+            EncryptedActionRequest::Get { .. } => None,
+            EncryptedActionRequest::Remove { .. } => None,
+        }
+    }
+
     pub fn as_get(&self) -> Option<&EncryptedData> {
         if let Self::Get { name } = self {
             Some(name)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_remove(&self) -> Option<&EncryptedData> {
+        if let Self::Remove { name } = self {
+            Some(name)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_new(&self) -> Option<&EncryptedPaste> {
+        if let Self::New(encrypted_paste) = self {
+            Some(encrypted_paste)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_mut(&self) -> Option<&EncryptedPaste> {
+        if let Self::Mut(encrypted_paste) = self {
+            Some(encrypted_paste)
         } else {
             None
         }

@@ -47,8 +47,10 @@ fn post(url: &str, data: String, response_capacity: usize) -> anyhow::Result<Str
     }
 }
 
+const API_USER_KEY_FILE_NAME: &'static str = "api_user_key.txt";
+
 pub fn api_user_key() -> anyhow::Result<String> {
-    if let Ok(api_user_key_bytes) = fs::read("api_user_key.txt") {
+    if let Ok(api_user_key_bytes) = fs::read(API_USER_KEY_FILE_NAME) {
         return Ok(String::from_utf8(api_user_key_bytes)?);
     }
 
@@ -62,7 +64,7 @@ pub fn api_user_key() -> anyhow::Result<String> {
 
     let key = post("https://pastebin.com/api/api_login.php", data, 512)?;
 
-    fs::write("api_user_key.txt", &key)?;
+    fs::write(API_USER_KEY_FILE_NAME, &key)?;
     Ok(key)
 }
 

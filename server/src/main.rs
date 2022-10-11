@@ -1,8 +1,7 @@
 use either::Either;
 use generic_array::GenericArray;
 use msg::{
-    AesKey, EncryptedActionRequest, EncryptedActionResponse, EncryptedData, EncryptedPaste,
-    GreetRequest, Msg, RsaPublicKey,
+    AesKey, EncryptedActionRequest, EncryptedData, EncryptedPaste, GreetRequest, Msg, RsaPublicKey,
 };
 use pastebin::ApiPasteKey;
 use rand::{rngs::ThreadRng, thread_rng, CryptoRng, Rng, RngCore};
@@ -96,12 +95,8 @@ impl State {
                 .as_encrypted_action_request()
                 .is_some()
             {
-                let encrypted_request = self
-                    .msgs
-                    .remove(msg_index)
-                    .1
-                    .encrypted_action_request()
-                    .unwrap();
+                let (api_paste_key, msg) = self.msgs.remove(msg_index);
+                let encrypted_request = msg.encrypted_action_request().unwrap();
                 if self
                     .msgs
                     .iter()
@@ -151,16 +146,19 @@ impl State {
                                         }
                                     }
                                     EncryptedActionRequest::Remove { name } => {
-                                        self.remove_paste(&name)?
+                                        self.remove_paste(&name)?;
+                                        pastebin::remove(&self.api_user_key, &api_paste_key)?;
                                     }
                                     EncryptedActionRequest::New(encrypted_paste) => {
                                         if !self.pastes.contains_key(&encrypted_paste.name) {
                                             self.new_paste(encrypted_request, encrypted_paste)?;
+                                            pastebin::remove(&self.api_user_key, &api_paste_key)?;
                                         }
                                     }
                                     EncryptedActionRequest::Mut(encrypted_paste) => {
                                         self.remove_paste(&encrypted_paste.name)?;
                                         self.new_paste(encrypted_request, encrypted_paste)?;
+                                        pastebin::remove(&self.api_user_key, &api_paste_key)?;
                                     }
                                 }
                                 continue 'a;
