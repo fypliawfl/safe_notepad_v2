@@ -1,2 +1,4 @@
 /target
 .DS_Store
+api_user_key.txt
+rsa_private_key.txt
