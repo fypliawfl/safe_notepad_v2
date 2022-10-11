@@ -46,12 +46,7 @@ impl State {
             for get_request_api_paste_key in self.msgs.iter().filter_map(|msg| {
                 msg.1
                     .as_encrypted_action_request()
-                    .map(|request| {
-                        request
-                            .as_get()
-                            .map(|other_name| (other_name == name).then_some(&msg.0))
-                    })
-                    .flatten()
+                    .map(|request| (request.name() == name).then_some(&msg.0))
                     .flatten()
             }) {
                 pastebin::remove(&self.api_user_key, &get_request_api_paste_key)?;

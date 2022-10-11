@@ -155,7 +155,7 @@ impl App {
             .is_some()
     }
 
-    fn pastebin_insert_if_msgs_do_not_contain_encrypted_request(
+    fn pastebin_insert_if_no_msg_contains_encrypted_request(
         &self,
         encrypted_request: EncryptedActionRequest,
     ) -> anyhow::Result<()> {
@@ -178,22 +178,18 @@ impl App {
                 if ui.button("Новая запись").clicked() {
                     self.msgs = pastebin::collect(&self.api_user_key).unwrap();
                     let encrypted_request = ActionRequest::New(self.clone_paste())
-                        .encrypt(&session_key)
+                        .encrypt(session_key)
                         .unwrap();
-                    self.pastebin_insert_if_msgs_do_not_contain_encrypted_request(
-                        encrypted_request,
-                    )
-                    .unwrap();
+                    self.pastebin_insert_if_no_msg_contains_encrypted_request(encrypted_request)
+                        .unwrap();
                 }
                 if ui.button("Редактировать запись").clicked() {
                     self.msgs = pastebin::collect(&self.api_user_key).unwrap();
                     let encrypted_request = ActionRequest::Mut(self.clone_paste())
-                        .encrypt(&session_key)
+                        .encrypt(session_key)
                         .unwrap();
-                    self.pastebin_insert_if_msgs_do_not_contain_encrypted_request(
-                        encrypted_request,
-                    )
-                    .unwrap();
+                    self.pastebin_insert_if_no_msg_contains_encrypted_request(encrypted_request)
+                        .unwrap();
                 }
                 if ui
                     .add_sized(
@@ -203,6 +199,13 @@ impl App {
                     .clicked()
                 {
                     self.msgs = pastebin::collect(&self.api_user_key).unwrap();
+                    let encrypted_request = ActionRequest::Remove {
+                        name: self.name.clone(),
+                    }
+                    .encrypt(session_key)
+                    .unwrap();
+                    self.pastebin_insert_if_no_msg_contains_encrypted_request(encrypted_request)
+                        .unwrap();
                 }
             })
         });
