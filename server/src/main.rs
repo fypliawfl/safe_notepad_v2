@@ -61,9 +61,10 @@ impl State {
         paste: EncryptedPaste,
     ) -> anyhow::Result<()> {
         assert!(self.pastes.insert(paste.name, paste.content).is_none());
-        pastebin::insert(&Msg::EncryptedActionResponse(
-            encrypted_request.to_response(Either::Left(None)),
-        ))
+        pastebin::insert(
+            &self.api_user_key,
+            &Msg::EncryptedActionResponse(encrypted_request.to_response(Either::Left(None))),
+        )
         .map(drop)
     }
 
@@ -77,9 +78,10 @@ impl State {
                     .all(|response| &response.0 != request)
                 {
                     let key = random_session_key(&mut self.rng);
-                    pastebin::insert(&Msg::GreetResponse(
-                        request.clone().to_response(&mut self.rng, &key)?,
-                    ))
+                    pastebin::insert(
+                        &self.api_user_key,
+                        &Msg::GreetResponse(request.clone().to_response(&mut self.rng, &key)?),
+                    )
                     .unwrap();
                     let rsa_public_key = self.msgs.remove(msg_index).1.greet_request().unwrap().0;
                     self.session_and_rsa_keys
@@ -92,6 +94,11 @@ impl State {
             {
                 let (api_paste_key, msg) = self.msgs.remove(msg_index);
                 let encrypted_request = msg.encrypted_action_request().unwrap();
+
+                dbg!(encrypted_request
+                    .clone()
+                    .decrypt(&self.session_and_rsa_keys[0].0[0]));
+
                 if self
                     .msgs
                     .iter()
@@ -114,30 +121,37 @@ impl State {
                                         session_keys.push(random_session_key(&mut self.rng));
                                     }
                                     if session_key_index != session_keys.len().saturating_sub(1) {
-                                        pastebin::insert(&Msg::EncryptedActionResponse(
-                                            encrypted_request.to_response(Either::Right(
-                                                GreetRequest(rsa_public_key.clone())
-                                                    .to_response(
-                                                        &mut self.rng,
-                                                        &session_keys.last().unwrap(),
-                                                    )?
-                                                    .1,
-                                            )),
-                                        ))?;
+                                        dbg!();
+                                        pastebin::insert(
+                                            &self.api_user_key,
+                                            &Msg::EncryptedActionResponse(
+                                                encrypted_request.to_response(Either::Right(
+                                                    GreetRequest(rsa_public_key.clone())
+                                                        .to_response(
+                                                            &mut self.rng,
+                                                            &session_keys.last().unwrap(),
+                                                        )?
+                                                        .1,
+                                                )),
+                                            ),
+                                        )?;
                                         continue 'a;
                                     }
                                 }
                                 match encrypted_request.clone() {
                                     EncryptedActionRequest::Get { name } => {
                                         if let Some(content) = self.pastes.get(&name) {
-                                            pastebin::insert(&Msg::EncryptedActionResponse(
-                                                encrypted_request.to_response(Either::Left(Some(
-                                                    EncryptedPaste {
-                                                        name,
-                                                        content: content.clone(),
-                                                    },
-                                                ))),
-                                            ))?;
+                                            pastebin::insert(
+                                                &self.api_user_key,
+                                                &Msg::EncryptedActionResponse(
+                                                    encrypted_request.to_response(Either::Left(
+                                                        Some(EncryptedPaste {
+                                                            name,
+                                                            content: content.clone(),
+                                                        }),
+                                                    )),
+                                                ),
+                                            )?;
                                         }
                                     }
                                     EncryptedActionRequest::Remove { name } => {
@@ -146,6 +160,7 @@ impl State {
                                     }
                                     EncryptedActionRequest::New(encrypted_paste) => {
                                         if !self.pastes.contains_key(&encrypted_paste.name) {
+                                            dbg!();
                                             self.new_paste(encrypted_request, encrypted_paste)?;
                                             pastebin::remove(&self.api_user_key, &api_paste_key)?;
                                         }
@@ -171,13 +186,7 @@ fn main() {
     let mut state = State::default();
 
     loop {
-        match pastebin::collect(&state.api_user_key) {
-            Ok(msgs) => state.msgs = msgs,
-            Err(err) => eprintln!("{err}"),
-        }
-
-        if let Err(err) = state.drain_requests() {
-            eprintln!("{err}")
-        }
+        state.msgs = pastebin::collect(&state.api_user_key).unwrap();
+        state.drain_requests().unwrap();
     }
 }

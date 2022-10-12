@@ -48,7 +48,7 @@ struct App {
     content: String,
 }
 
-const PENDING_REQUEST_TIMEOUT: Duration = Duration::from_secs(7);
+const PENDING_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 
 fn pending_label(ui: &mut Ui, text: &str) {
     ui.centered_and_justified(|ui| {
@@ -91,7 +91,10 @@ impl App {
         {
             Some(decrypt_aes_key(&encrypted_session_key, &rsa_private_key)?)
         } else {
-            pastebin::insert(&msg::Msg::GreetRequest(GreetRequest(rsa_public_key)))?;
+            pastebin::insert(
+                &api_user_key,
+                &msg::Msg::GreetRequest(GreetRequest(rsa_public_key)),
+            )?;
             None
         };
 
@@ -119,7 +122,10 @@ impl App {
                 .filter_map(|(_, msg)| msg.as_greet_response())
                 .find(|greet_response| greet_response.0 == greet_request)
             {
-                self.session_key = Some(decrypt_aes_key(&encryted_session_key, &rsa_private_key)?);
+                self.session_key = Some(decrypt_aes_key(
+                    &encryted_session_key,
+                    &rsa_private_key
+                )?);
             } else {
                 self.pending_request_instant = Instant::now();
             }
@@ -160,7 +166,10 @@ impl App {
         encrypted_request: EncryptedActionRequest,
     ) -> anyhow::Result<()> {
         if !self.msgs_contain_encrypted_request(&encrypted_request) {
-            pastebin::insert(&Msg::EncryptedActionRequest(encrypted_request))?;
+            pastebin::insert(
+                &self.api_user_key,
+                &Msg::EncryptedActionRequest(encrypted_request),
+            )?;
         }
         Ok(())
     }
@@ -286,6 +295,7 @@ impl eframe::App for App {
                 self.show_pending_greet_request(ui).unwrap();
             }
         });
+        ctx.request_repaint_after(PENDING_REQUEST_TIMEOUT + Duration::from_secs(1));
     }
 }
 

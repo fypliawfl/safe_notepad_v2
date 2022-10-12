@@ -44,43 +44,44 @@ pub fn decrypt_aes_key(
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct EncryptedData {
-    pub content: Vec<GenericArray<u8, U16>>,
-    pub zero_suffix_len: usize,
+    pub blocks: Vec<GenericArray<u8, U16>>,
+    pub last_block_len: usize,
 }
 
 impl EncryptedData {
     pub fn encrypt<T: Serialize>(x: &T, key: &AesKey) -> serde_cbor::Result<Self> {
         let bytes = serde_cbor::to_vec(x)?;
-        let zero_suffix_len = bytes.len() % 16;
-        let mut content: Vec<_> = bytes
+        let mut last_block_len = 16;
+        let mut blocks: Vec<_> = bytes
             .chunks(16)
             .map(|chunk| {
                 if chunk.len() == 16 {
                     GenericArray::from_slice(chunk).clone()
                 } else {
                     let mut array = [0; 16];
+                    last_block_len = chunk.len();
                     array[0..chunk.len()].copy_from_slice(chunk);
                     GenericArray::from_slice(&array).clone()
                 }
             })
             .collect();
         let mut cipher = Aes256::new(key);
-        cipher.encrypt_blocks_mut(&mut content);
+        cipher.encrypt_blocks_mut(&mut blocks);
         Ok(Self {
-            content,
-            zero_suffix_len,
+            blocks,
+            last_block_len,
         })
     }
 
     pub fn decrypt<T: for<'de> Deserialize<'de>>(mut self, key: &AesKey) -> serde_cbor::Result<T> {
         let mut cipher = Aes256::new(key);
-        cipher.decrypt_blocks_mut(&mut self.content);
-        let mut bytes = Vec::with_capacity(self.content.len());
-        for chunk in &self.content[..self.content.len().saturating_sub(1)] {
+        cipher.decrypt_blocks_mut(&mut self.blocks);
+        let mut bytes = Vec::with_capacity(self.blocks.len() * 16);
+        for chunk in &self.blocks[..self.blocks.len().saturating_sub(1)] {
             bytes.extend_from_slice(chunk);
         }
-        if let Some(last) = self.content.last() {
-            bytes.extend_from_slice(&last[..16usize.saturating_sub(self.zero_suffix_len)]);
+        if let Some(last) = self.blocks.last() {
+            bytes.extend_from_slice(&last[..self.last_block_len]);
         }
         serde_cbor::from_slice(&bytes)
     }
@@ -307,5 +308,23 @@ impl Msg {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use generic_array::GenericArray;
+    use rand::{thread_rng, Rng};
+    use std::array;
+
+    use crate::EncryptedData;
+
+    #[test]
+    fn encrypted_data() {
+        let key = GenericArray::from(array::from_fn(|_| thread_rng().gen()));
+        let data = "Hello world".to_string();
+        let encrypted_data = EncryptedData::encrypt(&data, &key).unwrap();
+        let decrypted_data: String = encrypted_data.decrypt(&key).unwrap();
+        assert_eq!(data, decrypted_data);
     }
 }
