@@ -91,7 +91,7 @@ impl App {
         {
             Some(decrypt_aes_key(&encrypted_session_key, &rsa_private_key)?)
         } else {
-            gist::insert(&msg::Msg::GreetRequest(GreetRequest(rsa_public_key)))?;
+            dbg!(gist::insert(&msg::Msg::GreetRequest(GreetRequest(rsa_public_key)))?);
             None
         };
 
