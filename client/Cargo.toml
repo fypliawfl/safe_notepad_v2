@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 eframe = "0.19"
 msg = { path = "../msg" }
-pastebin = { path = "../pastebin" }
+gist = { path = "../gist" }
 serde = "1.0"
 rsa = { version = "0.6", features = ["serde"] }
 rand = "0.8"

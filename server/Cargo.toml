@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+gist = { path = "../gist" }
 msg = { path = "../msg" }
-pastebin = { path = "../pastebin" }
 anyhow = "1.0"
 rand = "0.8"
 generic-array = { version = "0.14", features = ["serde"] }

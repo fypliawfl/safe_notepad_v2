@@ -14,7 +14,6 @@ use msg::{
     decrypt_aes_key, ActionRequest, AesKey, EncryptedActionRequest, GreetRequest, Msg, Paste,
     RsaPrivateKey,
 };
-use pastebin::ApiPasteKey;
 use rand::{rngs::ThreadRng, thread_rng, CryptoRng, RngCore};
 
 const RSA_PRIVATE_KEY_FILE_NAME: &'static str = "rsa_private_key.json";
@@ -39,9 +38,8 @@ fn rsa_private_key<R: CryptoRng + RngCore>(rng: &mut R) -> RsaPrivateKey {
 
 struct App {
     rng: ThreadRng,
-    api_user_key: String,
     session_key: Option<AesKey>,
-    msgs: Vec<(ApiPasteKey, Msg)>,
+    msgs: Vec<(gist::FileKey, Msg)>,
     pending_request_retry_instant: Instant,
     pending_get_request: Option<EncryptedActionRequest>,
     pending_get_request_start_instant: Instant,
@@ -82,8 +80,7 @@ impl App {
         cc.egui_ctx.set_fonts(fonts);
 
         let mut rng = thread_rng();
-        let api_user_key = pastebin::api_user_key()?;
-        let msgs = pastebin::collect(&api_user_key)?;
+        let msgs = gist::collect()?;
         let rsa_private_key = rsa_private_key(&mut rng);
         let rsa_public_key = rsa_private_key.to_public_key();
 
@@ -94,16 +91,12 @@ impl App {
         {
             Some(decrypt_aes_key(&encrypted_session_key, &rsa_private_key)?)
         } else {
-            pastebin::insert(
-                &api_user_key,
-                &msg::Msg::GreetRequest(GreetRequest(rsa_public_key)),
-            )?;
+            gist::insert(&msg::Msg::GreetRequest(GreetRequest(rsa_public_key)))?;
             None
         };
 
         Ok(Self {
             rng,
-            api_user_key,
             session_key,
             msgs,
             pending_request_retry_instant: Instant::now(),
@@ -117,7 +110,7 @@ impl App {
     fn show_pending_greet_request(&mut self, ui: &mut Ui) -> anyhow::Result<()> {
         pending_label(ui, "Получаем сессионный ключ ...");
         if self.pending_request_retry_instant.elapsed() >= PENDING_REQUEST_RETRY_PERIOD {
-            self.msgs = pastebin::collect(&self.api_user_key)?;
+            self.msgs = gist::collect()?;
             let rsa_private_key = rsa_private_key(&mut self.rng);
             let greet_request = GreetRequest(rsa_private_key.to_public_key());
             if let Some((_, encryted_session_key)) = self
@@ -140,12 +133,9 @@ impl App {
                 if ui.button("Новый RSA ключ").clicked() {
                     generate_rsa_private_key(&mut self.rng);
                     self.session_key = None;
-                    pastebin::insert(
-                        &self.api_user_key,
-                        &Msg::GreetRequest(GreetRequest(
-                            rsa_private_key(&mut self.rng).to_public_key(),
-                        )),
-                    )
+                    gist::insert(&Msg::GreetRequest(GreetRequest(
+                        rsa_private_key(&mut self.rng).to_public_key(),
+                    )))
                     .unwrap();
                 };
                 ui.add_sized(
@@ -174,10 +164,7 @@ impl App {
         encrypted_request: EncryptedActionRequest,
     ) -> anyhow::Result<()> {
         if !self.msgs_contain_encrypted_request(&encrypted_request) {
-            pastebin::insert(
-                &self.api_user_key,
-                &Msg::EncryptedActionRequest(encrypted_request),
-            )?;
+            gist::insert(&Msg::EncryptedActionRequest(encrypted_request))?;
         }
         Ok(())
     }
@@ -192,7 +179,7 @@ impl App {
     fn show_actions(&mut self, ui: &mut Ui, session_key: &AesKey) {
         ui.horizontal(|ui| {
             if ui.button("Новая запись").clicked() {
-                self.msgs = pastebin::collect(&self.api_user_key).unwrap();
+                self.msgs = gist::collect().unwrap();
                 let encrypted_request = ActionRequest::New(self.clone_paste())
                     .encrypt(session_key)
                     .unwrap();
@@ -200,7 +187,7 @@ impl App {
                     .unwrap();
             }
             if ui.button("Редактировать запись").clicked() {
-                self.msgs = pastebin::collect(&self.api_user_key).unwrap();
+                self.msgs = gist::collect().unwrap();
                 let encrypted_request = ActionRequest::Mut(self.clone_paste())
                     .encrypt(session_key)
                     .unwrap();
@@ -214,7 +201,7 @@ impl App {
                 )
                 .clicked()
             {
-                self.msgs = pastebin::collect(&self.api_user_key).unwrap();
+                self.msgs = gist::collect().unwrap();
                 let encrypted_request = ActionRequest::Remove {
                     name: self.name.clone(),
                 }
@@ -236,7 +223,7 @@ impl App {
                     .encrypt(session_key)
                     .unwrap(),
                 );
-                pastebin::insert(&self.api_user_key, &encrypted_request_msg).unwrap();
+                gist::insert(&encrypted_request_msg).unwrap();
                 self.pending_get_request_start_instant = Instant::now();
                 self.pending_get_request =
                     Some(encrypted_request_msg.encrypted_action_request().unwrap());
@@ -256,9 +243,9 @@ impl App {
         pending_label(ui, &format!("Получаем запись \"{}\" ...", self.name));
         if self.pending_get_request_start_instant.elapsed() < PENDING_GET_REQUEST_TIMEOUT {
             if self.pending_request_retry_instant.elapsed() >= PENDING_REQUEST_RETRY_PERIOD {
-                self.msgs = pastebin::collect(&self.api_user_key)?;
+                self.msgs = gist::collect()?;
                 let pending_get_request = self.pending_get_request.as_ref().unwrap();
-                if let Some((api_paste_key, (_, encrypted_response))) = self
+                if let Some((file_key, (_, encrypted_response))) = self
                     .msgs
                     .iter()
                     .filter_map(|(api_paste_key, msg)| {
@@ -281,7 +268,7 @@ impl App {
                             let rsa_private_key = rsa_private_key(&mut self.rng);
                             self.session_key =
                                 Some(decrypt_aes_key(encrypted_session_key, &rsa_private_key)?);
-                            pastebin::remove(&self.api_user_key, &api_paste_key)?;
+                            gist::remove(*file_key)?;
                         }
                     }
                 }

@@ -4,14 +4,13 @@ use curl::easy::{Easy, List};
 use json::{object::Object as JsonObject, JsonValue};
 use msg::Msg;
 use rand::{thread_rng, Rng};
-use serde::{Deserialize, Serialize};
 
 const AUTHORIZATION_HEADER: &'static str =
     "Authorization: Bearer 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";
 
 const URL: &'static str = "https://api.github.com/gists/8f275b3dfb80dd1ca8e6c46eaa320b86";
 
-pub type FileKey = String;
+pub type FileKey = u128;
 
 pub fn recv(handle: &mut Easy, capacity: usize) -> anyhow::Result<String> {
     let mut response_bytes = Vec::with_capacity(capacity);
@@ -55,7 +54,7 @@ fn json_object_field<'a>(
         .ok_or_else(|| anyhow::anyhow!("expected {name} field on json object"))
 }
 
-pub fn collect() -> anyhow::Result<Vec<(u128, Msg)>> {
+pub fn collect() -> anyhow::Result<Vec<(FileKey, Msg)>> {
     let mut output = Vec::with_capacity(8192);
 
     let mut handle = handle()?;
@@ -101,7 +100,7 @@ fn post(handle: &mut Easy, data: String, recv_capaciy: usize) -> anyhow::Result<
     recv(handle, recv_capaciy)
 }
 
-pub fn insert(msg: &Msg) -> anyhow::Result<u128> {
+pub fn insert(msg: &Msg) -> anyhow::Result<FileKey> {
     let file_key = thread_rng().gen();
     let msg_json_string = serde_json::to_string_pretty(msg)?;
     let post_data = format!(
@@ -114,7 +113,7 @@ pub fn insert(msg: &Msg) -> anyhow::Result<u128> {
     Ok(file_key)
 }
 
-pub fn remove(file_key: u128) -> anyhow::Result<()> {
+pub fn remove(file_key: FileKey) -> anyhow::Result<()> {
     let post_data = format!("{{ \"files\": {{\"{file_key}.json\": null }} }}",);
 
     let mut handle = handle()?;

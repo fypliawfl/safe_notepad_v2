@@ -260,8 +260,8 @@ dependencies = [
  "anyhow",
  "eframe",
  "either",
+ "gist",
  "msg",
- "pastebin",
  "rand",
  "rsa",
  "serde",
@@ -871,7 +871,6 @@ dependencies = [
  "json",
  "msg",
  "rand",
- "serde",
  "serde_json",
 ]
 
@@ -1508,19 +1507,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pastebin"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "curl",
- "msg",
- "rand",
- "serde",
- "serde_json",
- "xml-rs",
-]
-
-[[package]]
 name = "pem-rfc7468"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1873,8 +1859,8 @@ dependencies = [
  "anyhow",
  "either",
  "generic-array",
+ "gist",
  "msg",
- "pastebin",
  "rand",
  "serde",
  "serde-encrypt",
