@@ -165,7 +165,7 @@ pub fn remove(api_user_key: &str, api_paste_key: &str) -> anyhow::Result<()> {
             .position(|(other_api_paste_key, _)| other_api_paste_key == api_paste_key)
         {
             key_msgs.remove(position);
-            fs::write(MOCK_PASTEBIN_FILE_NAME, &serde_json::to_vec(&key_msgs)?)?;
+            fs::write(MOCK_PASTEBIN_FILE_NAME, &serde_json::to_vec_pretty(&key_msgs)?)?;
         }
         Ok(())
     }
@@ -192,7 +192,10 @@ pub fn insert(api_user_key: &str, msg: &Msg) -> anyhow::Result<String> {
         let mut key_msgs = collect(api_user_key)?;
         let api_paste_key = rand::Rng::gen::<u128>(&mut rand::thread_rng()).to_string();
         key_msgs.push((api_paste_key.clone(), msg.clone()));
-        fs::write(MOCK_PASTEBIN_FILE_NAME, &serde_json::to_vec_pretty(&key_msgs)?)?;
+        fs::write(
+            MOCK_PASTEBIN_FILE_NAME,
+            &serde_json::to_vec_pretty(&key_msgs)?,
+        )?;
         Ok(api_paste_key)
     }
 }

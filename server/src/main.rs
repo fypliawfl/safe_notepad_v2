@@ -43,13 +43,19 @@ fn random_session_key<R: CryptoRng + RngCore>(rng: &mut R) -> AesKey {
 impl State {
     fn remove_paste(&mut self, name: &EncryptedData) -> anyhow::Result<()> {
         if self.pastes.remove(name).is_some() {
-            for get_request_api_paste_key in self.msgs.iter().filter_map(|msg| {
+            for api_paste_key in self.msgs.iter().filter_map(|msg| {
                 msg.1
                     .as_encrypted_action_request()
                     .map(|request| (request.name() == name).then_some(&msg.0))
                     .flatten()
+                    .or_else(|| {
+                        msg.1
+                            .as_encrypted_action_response()
+                            .map(|(request, _)| (request.name() == name).then_some(&msg.0))
+                            .flatten()
+                    })
             }) {
-                pastebin::remove(&self.api_user_key, &get_request_api_paste_key)?;
+                pastebin::remove(&self.api_user_key, &api_paste_key)?;
             }
         }
         Ok(())
