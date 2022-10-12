@@ -50,7 +50,7 @@ fn post(url: &str, data: String, response_capacity: usize) -> anyhow::Result<Str
 const API_USER_KEY_FILE_NAME: &'static str = "api_user_key.txt";
 
 #[cfg(feature = "mock")]
-const MOCK_PASTEBIN_FILE_NAME: &'static str = "mock_pastebin.txt";
+const MOCK_PASTEBIN_FILE_NAME: &'static str = "mock_pastebin.json";
 
 pub fn api_user_key() -> anyhow::Result<String> {
     #[cfg(feature = "mock")]

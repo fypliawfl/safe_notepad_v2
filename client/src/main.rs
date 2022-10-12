@@ -17,7 +17,7 @@ use msg::{
 use pastebin::ApiPasteKey;
 use rand::{rngs::ThreadRng, thread_rng, CryptoRng, RngCore};
 
-const RSA_PRIVATE_KEY_FILE_NAME: &'static str = "rsa_private_key.txt";
+const RSA_PRIVATE_KEY_FILE_NAME: &'static str = "rsa_private_key.json";
 
 fn generate_rsa_private_key<R: CryptoRng + RngCore>(rng: &mut R) -> RsaPrivateKey {
     let key = RsaPrivateKey::new(rng, 1024).unwrap();
@@ -122,10 +122,7 @@ impl App {
                 .filter_map(|(_, msg)| msg.as_greet_response())
                 .find(|greet_response| greet_response.0 == greet_request)
             {
-                self.session_key = Some(decrypt_aes_key(
-                    &encryted_session_key,
-                    &rsa_private_key
-                )?);
+                self.session_key = Some(decrypt_aes_key(&encryted_session_key, &rsa_private_key)?);
             } else {
                 self.pending_request_instant = Instant::now();
             }
@@ -157,7 +154,9 @@ impl App {
         self.msgs
             .iter()
             .filter_map(|(_, msg)| msg.as_encrypted_action_request())
-            .find(|other_encrypted_request| *other_encrypted_request == encrypted_request)
+            .find(|other_encrypted_request| {
+                dbg!(*other_encrypted_request) == dbg!(encrypted_request)
+            })
             .is_some()
     }
 
@@ -183,53 +182,54 @@ impl App {
 
     fn show_actions(&mut self, ui: &mut Ui, session_key: &AesKey) {
         ui.horizontal(|ui| {
-            ui.group(|ui| {
-                if ui.button("Новая запись").clicked() {
-                    self.msgs = pastebin::collect(&self.api_user_key).unwrap();
-                    let encrypted_request = ActionRequest::New(self.clone_paste())
-                        .encrypt(session_key)
-                        .unwrap();
-                    self.pastebin_insert_if_no_msg_contains_encrypted_request(encrypted_request)
-                        .unwrap();
-                }
-                if ui.button("Редактировать запись").clicked() {
-                    self.msgs = pastebin::collect(&self.api_user_key).unwrap();
-                    let encrypted_request = ActionRequest::Mut(self.clone_paste())
-                        .encrypt(session_key)
-                        .unwrap();
-                    self.pastebin_insert_if_no_msg_contains_encrypted_request(encrypted_request)
-                        .unwrap();
-                }
-                if ui
-                    .add_sized(
-                        available_width(&ui, &TextStyle::Button),
-                        Button::new("Удалить запись"),
-                    )
-                    .clicked()
-                {
-                    self.msgs = pastebin::collect(&self.api_user_key).unwrap();
-                    let encrypted_request = ActionRequest::Remove {
-                        name: self.name.clone(),
-                    }
+            if ui.button("Новая запись").clicked() {
+                self.msgs = pastebin::collect(&self.api_user_key).unwrap();
+                let encrypted_request = ActionRequest::New(self.clone_paste())
                     .encrypt(session_key)
                     .unwrap();
-                    self.pastebin_insert_if_no_msg_contains_encrypted_request(encrypted_request)
-                        .unwrap();
+                self.pastebin_insert_if_no_msg_contains_encrypted_request(encrypted_request)
+                    .unwrap();
+            }
+            if ui.button("Редактировать запись").clicked() {
+                self.msgs = pastebin::collect(&self.api_user_key).unwrap();
+                let encrypted_request = ActionRequest::Mut(self.clone_paste())
+                    .encrypt(session_key)
+                    .unwrap();
+                self.pastebin_insert_if_no_msg_contains_encrypted_request(encrypted_request)
+                    .unwrap();
+            }
+            if ui
+                .add_sized(
+                    available_width(&ui, &TextStyle::Button),
+                    Button::new("Удалить запись"),
+                )
+                .clicked()
+            {
+                self.msgs = pastebin::collect(&self.api_user_key).unwrap();
+                let encrypted_request = ActionRequest::Remove {
+                    name: self.name.clone(),
                 }
-            })
+                .encrypt(session_key)
+                .unwrap();
+                self.pastebin_insert_if_no_msg_contains_encrypted_request(encrypted_request)
+                    .unwrap();
+            }
         });
     }
 
     fn show_get_and_name(&mut self, ui: &mut Ui, session_key: &AesKey) {
         ui.horizontal(|ui| {
             if ui.button("Найти запись").clicked() {
-                self.pending_get_request = Some(
+                let encrypted_request_msg = Msg::EncryptedActionRequest(
                     ActionRequest::Get {
                         name: self.name.clone(),
                     }
                     .encrypt(session_key)
                     .unwrap(),
-                )
+                );
+                pastebin::insert(&self.api_user_key, &encrypted_request_msg).unwrap();
+                self.pending_get_request =
+                    Some(encrypted_request_msg.encrypted_action_request().unwrap());
             }
             ui.add_sized(
                 available_width(ui, &TextStyle::Body),
@@ -286,9 +286,11 @@ impl eframe::App for App {
                 if self.pending_get_request.is_some() {
                     self.show_pending_get_request(ui, &session_key).unwrap();
                 } else {
-                    self.show_actions(ui, &session_key);
                     self.show_new_rsa_key(ui);
-                    self.show_get_and_name(ui, &session_key);
+                    ui.group(|ui| {
+                        self.show_actions(ui, &session_key);
+                        self.show_get_and_name(ui, &session_key);
+                    });
                     ui.add_sized(ui.available_size(), TextEdit::multiline(&mut self.content));
                 }
             } else {

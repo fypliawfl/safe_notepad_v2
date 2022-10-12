@@ -95,10 +95,6 @@ impl State {
                 let (api_paste_key, msg) = self.msgs.remove(msg_index);
                 let encrypted_request = msg.encrypted_action_request().unwrap();
 
-                dbg!(encrypted_request
-                    .clone()
-                    .decrypt(&self.session_and_rsa_keys[0].0[0]));
-
                 if self
                     .msgs
                     .iter()
@@ -160,7 +156,6 @@ impl State {
                                     }
                                     EncryptedActionRequest::New(encrypted_paste) => {
                                         if !self.pastes.contains_key(&encrypted_paste.name) {
-                                            dbg!();
                                             self.new_paste(encrypted_request, encrypted_paste)?;
                                             pastebin::remove(&self.api_user_key, &api_paste_key)?;
                                         }

@@ -1,5 +1,5 @@
 /target
 .DS_Store
 api_user_key.txt
-rsa_private_key.txt
-mock_pastebin.txt
+rsa_private_key.json
+mock_pastebin.json
