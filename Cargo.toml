@@ -1,2 +1,2 @@
 [workspace]
-members = ["client", "gist", "msg", "server"]
+members = ["clear", "client", "gist", "msg", "server"]

@@ -17,7 +17,7 @@ pub struct State {
     rng: ThreadRng,
     // (old..=fresh session keys, public key, instant when fresh session key was created)
     session_and_rsa_keys: Vec<(Vec<AesKey>, RsaPublicKey, Instant)>,
-    msgs: Vec<(gist::FileKey, Msg)>,
+    msgs: Vec<(gist::GistId, Msg)>,
     // (name, content)
     pastes: HashMap<EncryptedData, EncryptedData>,
 }
@@ -40,7 +40,7 @@ fn random_session_key<R: CryptoRng + RngCore>(rng: &mut R) -> AesKey {
 impl State {
     fn remove_paste(&mut self, name: &EncryptedData) -> anyhow::Result<()> {
         if self.pastes.remove(name).is_some() {
-            for file_key in self.msgs.iter().filter_map(|msg| {
+            for gist_id in self.msgs.iter().filter_map(|msg| {
                 msg.1
                     .as_encrypted_action_request()
                     .map(|request| (request.name() == name).then_some(&msg.0))
@@ -52,7 +52,7 @@ impl State {
                             .flatten()
                     })
             }) {
-                gist::remove(*file_key)?;
+                gist::remove(gist_id)?;
             }
         }
         Ok(())
@@ -93,7 +93,7 @@ impl State {
                 .as_encrypted_action_request()
                 .is_some()
             {
-                let (file_key, msg) = self.msgs.remove(msg_index);
+                let (gist_id, msg) = self.msgs.remove(msg_index);
                 let encrypted_request = msg.encrypted_action_request().unwrap();
 
                 if self
@@ -146,18 +146,18 @@ impl State {
                                     }
                                     EncryptedActionRequest::Remove { name } => {
                                         self.remove_paste(&name)?;
-                                        gist::remove(file_key)?;
+                                        gist::remove(&gist_id)?;
                                     }
                                     EncryptedActionRequest::New(encrypted_paste) => {
                                         if !self.pastes.contains_key(&encrypted_paste.name) {
                                             self.new_paste(encrypted_request, encrypted_paste)?;
-                                            gist::remove(file_key)?;
+                                            gist::remove(&gist_id)?;
                                         }
                                     }
                                     EncryptedActionRequest::Mut(encrypted_paste) => {
                                         self.remove_paste(&encrypted_paste.name)?;
                                         self.new_paste(encrypted_request, encrypted_paste)?;
-                                        gist::remove(file_key)?;
+                                        gist::remove(&gist_id)?;
                                     }
                                 }
                                 continue 'a;

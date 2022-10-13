@@ -254,6 +254,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "clear"
+version = "0.1.0"
+dependencies = [
+ "gist",
+]
+
+[[package]]
 name = "client"
 version = "0.1.0"
 dependencies = [
@@ -870,7 +877,6 @@ dependencies = [
  "curl",
  "json",
  "msg",
- "rand",
  "serde_json",
 ]
 

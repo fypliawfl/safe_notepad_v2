@@ -39,7 +39,7 @@ fn rsa_private_key<R: CryptoRng + RngCore>(rng: &mut R) -> RsaPrivateKey {
 struct App {
     rng: ThreadRng,
     session_key: Option<AesKey>,
-    msgs: Vec<(gist::FileKey, Msg)>,
+    msgs: Vec<(gist::GistId, Msg)>,
     pending_request_retry_instant: Instant,
     pending_get_request: Option<EncryptedActionRequest>,
     pending_get_request_start_instant: Instant,
@@ -91,7 +91,9 @@ impl App {
         {
             Some(decrypt_aes_key(&encrypted_session_key, &rsa_private_key)?)
         } else {
-            dbg!(gist::insert(&msg::Msg::GreetRequest(GreetRequest(rsa_public_key)))?);
+            dbg!(gist::insert(&msg::Msg::GreetRequest(GreetRequest(
+                rsa_public_key
+            )))?);
             None
         };
 
@@ -216,17 +218,17 @@ impl App {
     fn show_get_and_name(&mut self, ui: &mut Ui, session_key: &AesKey) {
         ui.horizontal(|ui| {
             if ui.button("Найти запись").clicked() {
-                let encrypted_request_msg = Msg::EncryptedActionRequest(
-                    ActionRequest::Get {
-                        name: self.name.clone(),
-                    }
-                    .encrypt(session_key)
-                    .unwrap(),
-                );
-                gist::insert(&encrypted_request_msg).unwrap();
+                let encrypted_request = ActionRequest::Get {
+                    name: self.name.clone(),
+                }
+                .encrypt(session_key)
+                .unwrap();
+                self.pastebin_insert_if_no_msg_contains_encrypted_request(
+                    encrypted_request.clone(),
+                )
+                .unwrap();
                 self.pending_get_request_start_instant = Instant::now();
-                self.pending_get_request =
-                    Some(encrypted_request_msg.encrypted_action_request().unwrap());
+                self.pending_get_request = Some(encrypted_request);
             }
             ui.add_sized(
                 available_width(ui, &TextStyle::Body),
@@ -245,7 +247,7 @@ impl App {
             if self.pending_request_retry_instant.elapsed() >= PENDING_REQUEST_RETRY_PERIOD {
                 self.msgs = gist::collect()?;
                 let pending_get_request = self.pending_get_request.as_ref().unwrap();
-                if let Some((file_key, (_, encrypted_response))) = self
+                if let Some((gist_id, (_, encrypted_response))) = self
                     .msgs
                     .iter()
                     .filter_map(|(api_paste_key, msg)| {
@@ -268,7 +270,7 @@ impl App {
                             let rsa_private_key = rsa_private_key(&mut self.rng);
                             self.session_key =
                                 Some(decrypt_aes_key(encrypted_session_key, &rsa_private_key)?);
-                            gist::remove(*file_key)?;
+                            gist::remove(&gist_id)?;
                         }
                     }
                 }
